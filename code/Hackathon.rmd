@@ -1,0 +1,204 @@
+---
+title: "Hackathon DIA1"
+author: "KUOCH Jacky -NICOLAS Kevin - YAYA-OYE Ikhlass // Team IJK"
+date: "`r format(Sys.time())`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+    toc_float: true
+    theme: cerulean
+---
+
+# Spotify Predictions - A Quick Introduction
+
+In this Machine Learning project, we will try to predict if a certain user will like a track or not. 
+For this, we have a **target** column with a descrete value which is equal to 0 if the user don't like a song and 1 if he likes it.  
+
+The dataset is composed of a **data.csv** file where we have all the informations that we need and a **test.csv** where we don't have the response and on which we must apply our models.
+
+The evaluation metric for this competition is the **accuracy** of our prediction.  
+So let's see how it has been going for us ! 
+
+
+# Load of the libraries
+
+*All the libraries that will need*
+
+```{r libraries}
+
+library(corrplot) # used to visualize the correlations between the columns of our dataset
+library(randomForest) # used for Random Forest model
+library(gbm) # used for Boosting model
+library(ggplot2)
+```
+
+# Load of the dataset
+
+*Loading of the two datasets*
+
+```{r dataload}
+
+data <- read.csv("data.csv")
+test <- read.csv("test.csv")
+
+```
+
+# Data exploration
+
+*Some informations about our dataset*
+
+```{r dataexplo}
+
+dim(data) # we have 1817 songs that will help us to build our model and 16 columns
+
+names(data) # the columns are composed of 13 audio features for a song, a column called target that tells if the user liked the song or not and two columns that give the name and the artist of the song
+
+str(data) # we can see the type of the columns that are either of integer, float or string type.
+
+summary(data) # quick summary for each column
+
+```
+
+# Preprocessing
+
+*Cleaning of the dataset to optimize the prediction*
+
+```{r preprocessing}
+
+data <- na.omit(data) # we use this function to verify that we don't use NA values in our models
+
+df = data[,-c(15,16)] # we want to delete the columns that have a string type for their values (song_title & artist columns)
+tf = test[,-c(14,15)] # same as we did on the data.csv file, we delete the two last columns of the test.csv file because we will not use them for our models
+
+corrplot(cor(df), type = "upper", order = "hclust", tl.col = "black", tl.srt = 55)
+
+```
+
+
+# Modeling
+
+*Presentation of path to find the best model*
+
+#### Logistic Regression
+
+```{r logistic_model}
+
+logistic_model <- glm(target ~ ., family = 'binomial', data = df)
+logistic_model.pred <- predict.glm(logistic_model, newdata = tf, type = "response")
+logistic_model.pred <- ifelse(logistic_model.pred > 0.5, 1, 0)
+
+```
+
+We knew that it wasn't the most optimal model so we continue with ensemble classifiers that seemed better for our use.
+
+#### Random Forest
+
+```{r randomForest}
+
+set.seed(703804) # we used the student's number of Ikhlass
+rf <- randomForest(target ~ ., data = df, mtry = 4) # 13/3 = 4 after rounding it
+rf.pred <- predict(rf, newdata = tf, type = "response")
+rf.pred <- ifelse(rf.pred > 0.5, 1, 0)
+
+```
+
+We obtained an accuracy of **75,5%** on kaggle with this model
+
+#### Bagging
+
+```{r bagging}
+
+set.seed(703804)
+bagging <- randomForest(target ~ ., data = df, mtry = 13)
+bagging.pred <- predict(bagging, newdata = tf, type = "response")
+bagging.pred <- ifelse(bagging.pred > 0.5, 1, 0)
+
+```
+
+We obtained an accuracy of **73%** on kaggle with this model so we saw that this model was less efficient than Random Forest so we continue to search a better model
+
+#### Boosting
+
+```{r boosting}
+
+set.seed(703804)
+boost <- gbm(target ~ ., data = df, distribution = "bernoulli",
+            n.trees = 5000, interaction.depth = 4, shrinkage = 0.01)
+boost.pred <- predict(boost, newdata = tf, type = "response")
+boost.pred <- ifelse(boost.pred >0.5, 1, 0)
+
+```
+
+We obtained an accuracy of **76%** on kaggle with this model so we saw that our model improved so we tested to change parameters on this model
+
+With the logistic regression model, we wanted to see which attributes were impactants on the target attribute.
+
+```{r features_importance}
+
+summary(logistic_model)
+
+```
+
+We can see that the features *acousticness, danceability, instrumentalness, loudness, speechiness, valence, mode, duration_ms, tempo and target* are the most impactant features on the target feature so we tried our model on a dataset composed only with those features.
+
+```{r}
+
+subdata = data[,c("acousticness", "danceability", "instrumentalness", "loudness", "speechiness", "valence", "mode", "duration_ms", "tempo","target")]
+subtest = test[,c("acousticness", "danceability", "instrumentalness", "loudness", "speechiness", "valence", "mode", "duration_ms", "tempo")]
+
+set.seed(703804)
+boost1 <- gbm(target ~ ., data = subdata, distribution = "bernoulli",
+            n.trees = 5000, interaction.depth = 4, shrinkage = 0.01)
+boost.pred1 <- predict(boost1, newdata = subtest, type = "response")
+boost.pred1 <- ifelse(boost.pred1 > 0.5, 1, 0)
+
+```
+
+We obtained an accuracy of **72,5%** on kaggle with this model so we saw that this model was less efficient than our previous one with all the features so we kept them all
+
+**At this point, we noticed that we scaled our data but it wasn't needed in our case. So we tried to predict the testset with all the features and a dataset not scaled** 
+
+
+We proceeded several tests on the hyper parameters of the boosting model. We tried to act on the **cross validation** parameter but it reduced our accuracy everytime so we abandonned it.
+
+We changed the **number of trees** used in the bagging model, going from 3000 to 10000 but we kept a value of 5000 that gave us the better results.   
+After that, we increased the **interaction depth** of the model to 6 that specify the maximum depth of each tree.  
+For the **shrinkage** parameter that correspond to the learning rate of the tree, we tested a few values between 0.001 and 0.1 and we kept 0.004 that gave us the best result.  
+Finally, we added the hyper paramater the **n.nminobsinnode** that specify the minimum number of observations in the terminal nodes of the trees. We choose the value 6 after testing several values like 2, 3 or 10.  
+For the **distribtion**, we kept the Bernoulli distribution because it was the most efficient one compared to another one we tried, called 'adaboost'.
+
+```{r boosting_final}
+
+set.seed(55100)
+boost_final = gbm(target~., data = df, distribution = "bernoulli", 
+            n.trees = 5000, interaction.depth = 6, shrinkage = 0.004, n.minobsinnode = 6)
+boost.pred_final <- predict(boost_final, newdata = tf, type = "response")
+boost.pred_final <- ifelse(boost.pred_final > 0.5, 1, 0)
+
+```
+
+With the seed that we used from the beginning, we were stuck at 81,5%. We changed arbitrarily the seed by the postal code (55100) of our previous exchange location that is Kuala Lumpur in Malaysia and as if by chance it gave us a better accuracy so we kept it like that :)
+
+It allowed us to achieve a final accuracy of **82%**.
+
+To submit our models, we used this command : 
+
+```{r submit}
+
+to_be_submitted = data.frame(id = rownames(test), target = boost.pred_final)
+#write.csv(to_be_submitted , file = "BoostFinal.csv", row.names = F) # we put this in comments to avoid an issue in our report
+
+```
+
+Here is our final predictions : 
+
+```{r final_predictions}
+
+to_be_submitted
+
+```
+
+Thank you for reading,
+
+[You can check our position in the leaderboard by clicking this link ! We are the team named IJK](https://www.kaggle.com/c/hackathon-machine-learning-65415321065432156413206/leaderboard)
