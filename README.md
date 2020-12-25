@@ -1,6 +1,8 @@
 # Hackathon in R
 
 ## Introduction 
+
+This work have been made in group. Thanks to my crewmates [Jacky](https://github.com/JackyKch) and [Kevin](https://github.com/kevinnclas). <br><br>
 The dataset contains [features](https://developer.spotify.com/documentation/web-api/reference/tracks/get-audio-features/) of songs for a certain user collected on Spotify. The goal of this project was to predict if the user will like a track or not based on what he usually likes. We have been ranked based on our model accuracy between others students on Kaggle.<br> 
 All songs are labeled in the column target: “1” means the user likes it while “0” means he does not.<br>
 There is 16 columns in the dataset : The three latest describe the song with its name, the author and if it has been liked. The others are the features with which we will construct our model:<br>
